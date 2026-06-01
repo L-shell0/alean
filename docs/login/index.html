@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALEAN — handshake</title>
+<meta name="description" content="ALEAN handshake — operator authentication.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://alean.lempyra.com/login/">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap">
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --void:#03060a;--teal:#39f6e0;--violet:#a06bff;--pink:#ff4d9e;
+    --fg:#cfeaf0;--dim:#3d6b75;--dim2:#1b3138;
+  }
+  html,body{height:100%;}
+  body{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    background:var(--void);color:var(--fg);
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;cursor:crosshair;padding:24px;
+  }
+  body::after{
+    content:'';position:fixed;inset:0;z-index:6;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(57,246,224,.018) 2px,rgba(57,246,224,.018) 3px),
+      radial-gradient(ellipse at 50% 50%,transparent 55%,rgba(3,6,10,.85) 100%);
+    mix-blend-mode:screen;
+  }
+  .aperture{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;height:520px;z-index:0;pointer-events:none;opacity:.5;}
+  .ring{position:absolute;inset:0;border-radius:50%;border:1px solid;}
+  .ring.r1{border-color:rgba(57,246,224,.4);animation:spin 26s linear infinite;}
+  .ring.r2{inset:54px;border-color:rgba(160,107,255,.35);border-style:dashed;animation:spin 34s linear infinite reverse;}
+  .ring.r3{inset:120px;border-color:rgba(255,77,158,.3);animation:spin 18s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .panel{position:relative;z-index:2;width:min(420px,94vw);
+    border:1px solid var(--dim2);background:rgba(5,11,18,.55);backdrop-filter:blur(6px);
+    padding:34px 30px;}
+  .brand{font-size:34px;font-weight:300;letter-spacing:.2em;text-shadow:0 0 22px rgba(57,246,224,.5);}
+  .brand b{font-weight:600;color:var(--teal);}
+  .sub{font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--violet);margin-top:6px;margin-bottom:26px;}
+  label{display:block;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin:0 0 7px;}
+  input{width:100%;font-family:inherit;font-size:13px;color:var(--fg);background:rgba(57,246,224,.03);
+    border:1px solid var(--dim2);padding:11px 13px;outline:none;margin-bottom:18px;transition:border-color .2s;}
+  input:focus{border-color:var(--teal);}
+  button{width:100%;font-family:inherit;font-size:12px;letter-spacing:4px;text-transform:uppercase;
+    padding:14px;border:1px solid var(--teal);color:var(--teal);background:rgba(57,246,224,.05);
+    cursor:pointer;transition:all .3s cubic-bezier(.4,0,.2,1);}
+  button:hover:not(:disabled){background:var(--teal);color:var(--void);box-shadow:0 8px 30px rgba(57,246,224,.3);}
+  button:disabled{opacity:.4;cursor:wait;}
+  .status{margin-top:16px;font-size:10.5px;letter-spacing:1px;color:var(--dim);min-height:16px;}
+  .status.err{color:var(--pink);} .status.ok{color:var(--teal);}
+  .back{display:inline-block;margin-top:18px;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);text-decoration:none;}
+  .back:hover{color:var(--violet);}
+</style>
+</head>
+<body>
+  <div class="aperture" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div></div>
+
+  <form class="panel" id="form" autocomplete="off">
+    <div class="brand">AL<b>E</b>AN</div>
+    <div class="sub">handshake · adjacent dimension</div>
+
+    <label for="username">operator id</label>
+    <input type="text" id="username" name="username" autocomplete="username" autofocus>
+
+    <label for="password">passphrase</label>
+    <input type="password" id="password" name="password" autocomplete="current-password">
+
+    <button type="submit" id="submit">◇ transmit</button>
+    <div class="status" id="status">◇ channel idle</div>
+    <a class="back" href="../">← disengage</a>
+  </form>
+
+<script>
+var AUTH = {
+  url:        'https://sar1a.lempyra.com',
+  clientId:   'portal',
+  scope:      'payments,ink,profile',
+  tokenKey:   'alean_token',
+  refreshKey: 'alean_refresh',
+  userKey:    'alean_user',
+  landing:    '../app/'
+};
+
+// already authenticated → skip to app
+(function(){ if (sessionStorage.getItem(AUTH.tokenKey)) window.location.replace(AUTH.landing); })();
+
+var form = document.getElementById('form');
+var btn  = document.getElementById('submit');
+var msg  = document.getElementById('status');
+
+function setStatus(t, cls){ msg.className = 'status' + (cls ? ' ' + cls : ''); msg.textContent = t; }
+
+form.addEventListener('submit', async function(e){
+  e.preventDefault();
+  var username = document.getElementById('username').value.trim();
+  var password = document.getElementById('password').value;
+  if (!username || !password){ setStatus('◇ operator id + passphrase required', 'err'); return; }
+
+  btn.disabled = true; btn.textContent = '◇ transmitting…';
+  setStatus('◇ folding manifold …');
+
+  try {
+    // Step 1: authorize → code (public client, no secret)
+    var authResp = await fetch(AUTH.url + '/auth/authorize', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username:username, password:password, client_id:AUTH.clientId, scope:AUTH.scope })
+    });
+    if (!authResp.ok){
+      if (authResp.status === 401 || authResp.status === 403) throw new Error('handshake refused — invalid credentials');
+      var ed = await authResp.json().catch(function(){return {};});
+      throw new Error(ed.detail || ('authorize failed (' + authResp.status + ')'));
+    }
+    var ad = await authResp.json();
+    var code = ad.code || ad.authorization_code;
+    if (!code) throw new Error('no authorization code returned');
+
+    setStatus('◇ code locked — exchanging …');
+
+    // Step 2: token
+    var tokResp = await fetch(AUTH.url + '/auth/token', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ grant_type:'authorization_code', code:code, client_id:AUTH.clientId })
+    });
+    if (!tokResp.ok){
+      var te = await tokResp.json().catch(function(){return {};});
+      throw new Error(te.detail || ('token exchange failed (' + tokResp.status + ')'));
+    }
+    var td = await tokResp.json();
+    if (!td.access_token) throw new Error('no access token returned');
+
+    sessionStorage.setItem(AUTH.tokenKey, td.access_token);
+    if (td.refresh_token) sessionStorage.setItem(AUTH.refreshKey, td.refresh_token);
+    sessionStorage.setItem(AUTH.userKey, username);
+
+    btn.textContent = '◇ online';
+    setStatus('◇ handshake complete — entering ALEAN', 'ok');
+    setTimeout(function(){ window.location.replace(AUTH.landing); }, 650);
+
+  } catch(err){
+    btn.disabled = false; btn.textContent = '◇ transmit';
+    setStatus('◇ ' + (err.message || 'transmission error'), 'err');
+  }
+});
+</script>
+</body>
+</html>

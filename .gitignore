@@ -1,0 +1,5 @@
+# Local status / operational notes — kept out of the public repo
+STATUS.md
+*.local.md
+.env
+.env.*

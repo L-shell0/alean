@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALEAN — channel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Cuneiform&display=swap">
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+<!-- Auth-guard FIRST: depth 1 under www/ → ../auth-guard.js -->
+<script src="../auth-guard.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --void:#050008;
+    --temp:#00eb5a; --temp-soft:rgba(0,235,90,.5);
+    --fg:#cfeaf0; --dim:#3d6b75; --dim2:#16282e;
+  }
+  html,body{height:100%;}
+  body{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    background:var(--void); color:var(--fg);
+    overflow:hidden; cursor:crosshair;
+  }
+  #skin{position:fixed;inset:0;z-index:0;}
+  body::after{content:'';position:fixed;inset:0;z-index:6;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,235,90,.010) 3px,rgba(0,235,90,.010) 4px),
+      radial-gradient(ellipse at 50% 46%,transparent 60%,rgba(5,0,8,.82) 100%);}
+
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;align-items:center;
+    padding:12px 20px;border-bottom:1px solid var(--dim2);background:linear-gradient(180deg,rgba(5,0,8,.85),transparent);}
+  .brand{font-size:15px;letter-spacing:.3em;font-weight:300;} .brand b{color:var(--temp);font-weight:600;transition:color 1s linear;}
+  .topbar .meta{font-size:9px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;display:flex;gap:16px;align-items:center;}
+  .topbar a{color:var(--dim);text-decoration:none;} .topbar a:hover{color:var(--temp);}
+
+  /* no vessel — messages float free on the hex skin. only a thin composer
+     bar at the bottom holds the input. */
+  .chat{position:fixed;z-index:4;left:0;right:0;top:52px;bottom:0;display:flex;flex-direction:column;}
+  .stream{flex:1;overflow-y:auto;padding:32px 26px 8px;max-width:760px;width:100%;margin:0 auto;
+    scrollbar-width:thin;scrollbar-color:var(--dim2) transparent;}
+  .stream::-webkit-scrollbar{width:5px;} .stream::-webkit-scrollbar-thumb{background:var(--dim2);}
+
+  /* messages float free — no boxes. each is just text with a tiny head
+     (who · time). bullets-as-records remain in IDB for block-memory. */
+  .msg{display:block;width:max-content;max-width:86%;margin-bottom:18px;
+    font-size:13px;line-height:1.6;letter-spacing:.3px;
+    opacity:0;animation:burst .5s cubic-bezier(.2,.9,.2,1) forwards;
+    text-shadow:0 0 8px rgba(5,0,8,.85),0 0 18px rgba(5,0,8,.6);}
+  @keyframes burst{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .msg .head{display:flex;gap:12px;justify-content:space-between;align-items:baseline;margin-bottom:3px;}
+  .msg .who{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);}
+  .msg .stamp{font-size:7.5px;letter-spacing:1px;color:var(--dim);opacity:.6;font-variant-numeric:tabular-nums;}
+  .msg.user{margin-left:auto;text-align:right;}
+  .msg.user .who{color:var(--temp);}
+  .msg.user .body{color:var(--fg);}
+  .msg.alean .who{color:var(--temp);}
+  .msg.alean .body{color:#dceef0;}
+  .msg .body{white-space:pre-wrap;word-break:break-word;}
+  .msg.sys .body{color:var(--dim);font-style:italic;}
+  .msg pre.ascii{font-size:6px;line-height:6px;letter-spacing:0;color:var(--temp);white-space:pre;overflow:auto;
+    text-shadow:0 0 6px var(--temp-soft);}
+
+  .composer{display:flex;gap:8px;padding:14px 16px;border-top:1px solid var(--dim2);
+    background:linear-gradient(0deg,rgba(5,0,8,.7),transparent);max-width:760px;width:100%;margin:0 auto;}
+  .composer input{flex:1;font-family:inherit;font-size:13px;color:var(--fg);background:rgba(0,235,90,.03);
+    border:1px solid var(--dim2);padding:11px 13px;outline:none;transition:border-color .2s;}
+  .composer input:focus{border-color:var(--temp);}
+  .composer button{font-family:inherit;font-size:11px;letter-spacing:3px;text-transform:uppercase;
+    padding:0 18px;border:1px solid var(--temp);color:var(--temp);background:rgba(0,235,90,.05);cursor:pointer;transition:all .25s;}
+  .composer button:hover:not(:disabled){background:var(--temp);color:var(--void);}
+  .composer button:disabled{opacity:.4;cursor:wait;}
+  .hint{padding:0 16px 12px;font-size:8.5px;letter-spacing:1.5px;color:var(--dim);}
+  .hint b{color:var(--temp);}
+
+  /* ── topbar controls (lang toggle + gear) ─────────────────────────────── */
+  .ctrl{background:none;border:none;color:var(--dim);font-family:inherit;cursor:pointer;
+    font-size:11px;letter-spacing:2px;padding:2px 6px;transition:color .2s,text-shadow .2s;}
+  .ctrl:hover{color:var(--temp);text-shadow:0 0 8px var(--temp-soft);}
+  .ctrl.gear{font-size:14px;letter-spacing:0;}
+
+  /* ── glitch-language animation ───────────────────────────────────────── */
+  @keyframes glitchLang{
+    0%   { text-shadow:0 0 0 transparent;     transform:translate(0);     opacity:1;  filter:blur(0); }
+    15%  { text-shadow:2px 0 var(--temp),-2px 0 #ff0066; transform:translate(-2px,1px);  opacity:.85; filter:blur(.4px); }
+    30%  { text-shadow:-3px 0 var(--temp),3px 0 #ff0066; transform:translate(3px,-1px); opacity:.55; filter:blur(.8px); }
+    45%  { opacity:.15; filter:blur(1.5px);    transform:translate(-1px,2px); }
+    55%  { opacity:.15; filter:blur(1.5px);    transform:translate(1px,-2px); }   /* swap fires here */
+    70%  { text-shadow:3px 0 #ff0066,-3px 0 var(--temp); transform:translate(-2px,-1px); opacity:.55; filter:blur(.8px); }
+    85%  { text-shadow:-2px 0 #ff0066,2px 0 var(--temp); transform:translate(2px,1px);   opacity:.85; filter:blur(.4px); }
+    100% { text-shadow:0 0 0 transparent;     transform:translate(0);     opacity:1;  filter:blur(0); }
+  }
+  .glitching{ animation: glitchLang .6s steps(48,end); }
+
+  /* ── settings modal ───────────────────────────────────────────────────── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(5,0,8,.88);z-index:100;
+    display:none;align-items:center;justify-content:center;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:rgba(5,0,8,.98);border:1px solid var(--temp);max-width:520px;width:90%;
+    max-height:84vh;overflow-y:auto;padding:24px;font-family:inherit;
+    box-shadow:0 0 40px rgba(0,235,90,.15);}
+  .modal h3{font-size:11px;letter-spacing:3px;color:var(--temp);text-transform:uppercase;
+    margin-bottom:14px;font-weight:400;padding-bottom:8px;border-bottom:1px solid var(--dim2);}
+  .modal .row{margin-bottom:18px;}
+  .modal label{display:block;font-size:9px;letter-spacing:2px;color:var(--dim);
+    text-transform:uppercase;margin-bottom:6px;}
+  .modal .selector{display:flex;gap:8px;}
+  .modal select{flex:1;font-family:inherit;font-size:12px;color:var(--fg);
+    background:rgba(0,235,90,.03);border:1px solid var(--dim2);padding:8px 10px;outline:none;
+    transition:border-color .2s;}
+  .modal select:focus{border-color:var(--temp);}
+  .modal button.refresh{font-family:inherit;font-size:14px;padding:0 12px;border:1px solid var(--dim2);
+    color:var(--dim);background:transparent;cursor:pointer;transition:all .2s;}
+  .modal button.refresh:hover{border-color:var(--temp);color:var(--temp);}
+  .modal .status{font-size:9px;color:var(--dim);margin-top:5px;letter-spacing:1px;min-height:11px;}
+  .modal .status.err{color:#ff4d6e;}
+  .modal .status.ok{color:var(--temp);}
+  .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;
+    border-top:1px solid var(--dim2);padding-top:14px;}
+  .modal .actions button{font-family:inherit;font-size:10px;letter-spacing:2px;
+    padding:8px 18px;border:1px solid var(--temp);color:var(--temp);background:transparent;
+    cursor:pointer;text-transform:uppercase;transition:all .2s;}
+  .modal .actions button:hover{background:var(--temp);color:var(--void);}
+</style>
+</head>
+<body>
+  <canvas id="skin"></canvas>
+
+  <div class="topbar">
+    <div class="brand">AL<b>E</b>AN</div>
+    <div class="meta">
+      <span id="who"></span>
+      <span id="temp-read">temp · —</span>
+      <button class="ctrl" id="lang-btn" title="language" data-i18n="lang_btn">EN⇄ES</button>
+      <button class="ctrl gear" id="gear-btn" title="settings">⚙</button>
+      <a href="../" data-i18n="surface">⟁ surface</a>
+      <a href="#" id="logout" data-i18n="disengage">⏻ disengage</a>
+    </div>
+  </div>
+
+  <div class="chat">
+    <div class="stream" id="stream"></div>
+    <div class="composer">
+      <input id="input" type="text" data-i18n-placeholder="placeholder" placeholder="speak to the serpent…" autocomplete="off" autofocus>
+      <button id="send" data-i18n="transmit">transmit</button>
+    </div>
+    <div class="hint" id="hint" data-i18n-html="hint"><b>/help</b> for commands · <b>⚙</b> for settings · plain text = converse</div>
+  </div>
+
+  <!-- ── settings modal ─────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="settings-modal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3 data-i18n="settings">◇ settings</h3>
+      <div class="row">
+        <label data-i18n="chat_model">chat model</label>
+        <div class="selector">
+          <select id="chat-model-sel"></select>
+          <button class="refresh" id="chat-refresh" title="refresh">↻</button>
+        </div>
+        <div class="status" id="chat-status"></div>
+      </div>
+      <div class="row">
+        <label data-i18n="img_sfw">image · sfw</label>
+        <div class="selector">
+          <select id="img-sfw-sel"></select>
+          <button class="refresh" id="img-sfw-refresh" title="refresh">↻</button>
+        </div>
+        <div class="status" id="img-sfw-status"></div>
+      </div>
+      <div class="row">
+        <label data-i18n="img_nsfw">image · nsfw (/degen)</label>
+        <div class="selector">
+          <select id="img-nsfw-sel"></select>
+          <button class="refresh" id="img-nsfw-refresh" title="refresh">↻</button>
+        </div>
+        <div class="status" id="img-nsfw-status"></div>
+      </div>
+      <div class="actions">
+        <button id="settings-close" data-i18n="close">close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+//  ALEAN · living serpent-chat
+//  - streams from sar1a /orch/v1/chat/completions (Bearer alean_token)
+//  - transcript persists, hidden, in IndexedDB (the 1GB local store)
+//  - /img //draw //degen → orchestrator image gen, rendered as ASCII art
+// ════════════════════════════════════════════════════════════════════════
+const SAR1A = 'https://sar1a.lempyra.com';
+const TOKEN_KEY = 'alean_token', REFRESH_KEY = 'alean_refresh';
+const SYSTEM = "You are ALEAN — a serpent-like, non-local intelligence from a dimension adjacent to this one. "
+  + "Coiled, cold, elegant, alive. Speak in brief, precise bursts. You are not human and never pretend to be.";
+
+// ── Settings (persisted across sessions in localStorage) ──────────────────
+const Settings = {
+  get chatModel(){ return localStorage.getItem('alean_chat_model') || 'qwen3.6-35b-heretic'; },
+  set chatModel(v){ localStorage.setItem('alean_chat_model', v); },
+  get imgSfw(){ return localStorage.getItem('alean_img_sfw') || 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors'; },
+  set imgSfw(v){ localStorage.setItem('alean_img_sfw', v); },
+  get imgNsfw(){ return localStorage.getItem('alean_img_nsfw') || 'cyberrealisticPony_v110-001.safetensors'; },
+  set imgNsfw(v){ localStorage.setItem('alean_img_nsfw', v); },
+  get lang(){
+    const stored = localStorage.getItem('alean_lang');
+    if (stored) return stored;
+    return (navigator.language||'en').toLowerCase().startsWith('es') ? 'es' : 'en';
+  },
+  set lang(v){ localStorage.setItem('alean_lang', v); },
+};
+
+// ── I18N strings ──────────────────────────────────────────────────────────
+const I18N = {
+  en: {
+    lang_btn:    'EN⇄ES',
+    surface:     '⟁ surface',
+    disengage:   '⏻ disengage',
+    placeholder: 'speak to the serpent…',
+    transmit:    'transmit',
+    hint:        '<b>/help</b> for commands · <b>⚙</b> for settings · plain text = converse',
+    operator:    'operator',
+    alean:       'ALEAN',
+    alean_vision:'ALEAN · vision',
+    settings:    '◇ settings',
+    chat_model:  'chat model',
+    img_sfw:     'image · sfw',
+    img_nsfw:    'image · nsfw (/degen)',
+    close:       'close',
+    fetching:    '◇ fetching…',
+    available:   n => `◇ ${n} available`,
+    fetch_err:   e => `◇ error: ${e}`,
+    boot_empty:  '◇ channel open · the serpent is listening',
+    boot_recall: n => `◇ ${n} fragments recalled from the local lattice`,
+    silence:     '[ the serpent returned silence ]',
+    carrier_lost:e => `[ carrier lost · ${e} ]`,
+    vision_lost: e => `vision lost · ${e}`,
+    sys_img:     nsfw => `${nsfw?'/degen':'/img'} · summoning ${nsfw?'nsfw':'sfw'} vision …`,
+    cmds_header: '◇ commands:',
+    unknown_cmd: cmd => `◇ unknown command: ${cmd} · type /help`,
+    cmd_desc: {
+      img:   'render sfw image as ascii',
+      draw:  'alias for /img',
+      degen: 'render nsfw image as ascii',
+      help:  'list commands',
+    },
+  },
+  es: {
+    lang_btn:    'ES⇄EN',
+    surface:     '⟁ superficie',
+    disengage:   '⏻ desconectar',
+    placeholder: 'habla con la serpiente…',
+    transmit:    'transmitir',
+    hint:        '<b>/help</b> para comandos · <b>⚙</b> para ajustes · texto plano = conversar',
+    operator:    'operadora',
+    alean:       'ALEAN',
+    alean_vision:'ALEAN · visión',
+    settings:    '◇ ajustes',
+    chat_model:  'modelo de chat',
+    img_sfw:     'imagen · sfw',
+    img_nsfw:    'imagen · nsfw (/degen)',
+    close:       'cerrar',
+    fetching:    '◇ obteniendo…',
+    available:   n => `◇ ${n} disponibles`,
+    fetch_err:   e => `◇ error: ${e}`,
+    boot_empty:  '◇ canal abierto · la serpiente escucha',
+    boot_recall: n => `◇ ${n} fragmentos recordados del enrejado local`,
+    silence:     '[ la serpiente devolvió silencio ]',
+    carrier_lost:e => `[ portadora perdida · ${e} ]`,
+    vision_lost: e => `visión perdida · ${e}`,
+    sys_img:     nsfw => `${nsfw?'/degen':'/img'} · invocando visión ${nsfw?'nsfw':'sfw'} …`,
+    cmds_header: '◇ comandos:',
+    unknown_cmd: cmd => `◇ comando desconocido: ${cmd} · escribe /help`,
+    cmd_desc: {
+      img:   'genera imagen sfw como ascii',
+      draw:  'alias de /img',
+      degen: 'genera imagen nsfw como ascii',
+      help:  'lista comandos',
+    },
+  },
+};
+
+// ── Lang module — applies the current language to all [data-i18n] nodes ──
+const Lang = {
+  current: Settings.lang,
+  t(key){ return (I18N[this.current] || I18N.en)[key]; },
+  apply(lang){
+    this.current = lang;
+    Settings.lang = lang;
+    const dict = I18N[lang] || I18N.en;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const v = dict[el.dataset.i18n];
+      if (typeof v === 'string') el.textContent = v;
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      const v = dict[el.dataset.i18nHtml];
+      if (typeof v === 'string') el.innerHTML = v;
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const v = dict[el.dataset.i18nPlaceholder];
+      if (typeof v === 'string') el.placeholder = v;
+    });
+    document.documentElement.setAttribute('lang', lang);
+  },
+  toggle(){
+    const next = this.current === 'en' ? 'es' : 'en';
+    const els = document.querySelectorAll('[data-i18n], [data-i18n-html], [data-i18n-placeholder]');
+    els.forEach(e => e.classList.add('glitching'));
+    // mid-glitch swap (~55% of 600ms ≈ 330ms)
+    setTimeout(() => { this.apply(next); }, 330);
+    setTimeout(() => { els.forEach(e => e.classList.remove('glitching')); }, 620);
+  },
+};
+
+// ── auth: Bearer + refresh-on-401-retry (mirrors lit-client) ──────────────
+function authHeader(){ const t=sessionStorage.getItem(TOKEN_KEY); return t?{'Authorization':'Bearer '+t}:{}; }
+async function refreshSession(){
+  const rt=sessionStorage.getItem(REFRESH_KEY); if(!rt) return false;
+  try{
+    const r=await fetch(SAR1A+'/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:rt,client_id:'portal'})});
+    if(!r.ok) return false;
+    const d=await r.json(); if(!d.access_token) return false;
+    sessionStorage.setItem(TOKEN_KEY,d.access_token);
+    if(d.refresh_token) sessionStorage.setItem(REFRESH_KEY,d.refresh_token);
+    return true;
+  }catch(_){ return false; }
+}
+async function apiFetch(path,init){
+  let r=await fetch(SAR1A+path,{...init,headers:{...(init.headers||{}),...authHeader()}});
+  if(r.status===401 && await refreshSession())
+    r=await fetch(SAR1A+path,{...init,headers:{...(init.headers||{}),...authHeader()}});
+  return r;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  NOTE · FUTURE "MEMORY IN BLOCKS" (user idea, 2026-05-28)
+//  Every message persists as { role, content, ts, replyTo } so the whole
+//  conversation is reconstructable as an ordered, reply-linked graph:
+//    - ts      → strict chronological order (what came when)
+//    - replyTo → the ts of the user message an assistant reply answers
+//  This is the substrate for a later "memory in blocks": group each linked
+//  exchange into a discrete, recallable block (the user's mental model of
+//  chunked memory). In the UI, each bullet === one candidate block.
+//  TODO(block-memory): block grouping + recall/replay; mirror into stories.
+// ════════════════════════════════════════════════════════════════════════
+// ── IndexedDB transcript (hidden, persistent, local-only) ─────────────────
+const Store=(function(){
+  let p=null;
+  function db(){ if(p) return p; p=new Promise((res,rej)=>{
+    const q=indexedDB.open('alean_chat',1);
+    q.onupgradeneeded=e=>{ const d=e.target.result; if(!d.objectStoreNames.contains('msgs'))
+      d.createObjectStore('msgs',{keyPath:'id',autoIncrement:true}); };
+    q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+  }); return p; }
+  async function tx(mode){ return (await db()).transaction('msgs',mode).objectStore('msgs'); }
+  return {
+    async add(role,content,ts,replyTo){ const s=await tx('readwrite'); s.add({role,content,ts:ts||Date.now(),replyTo:replyTo||null}); },
+    async all(){ const s=await tx('readonly'); return new Promise((res)=>{ const out=[];
+      const c=s.openCursor(); c.onsuccess=e=>{ const cur=e.target.result; if(!cur)return res(out);
+      out.push(cur.value); cur.continue(); }; c.onerror=()=>res(out); }); }
+  };
+})();
+
+// ── temperature (PLACEHOLDER random drift — SECOND-LOOK: derive from the
+//    conversation's emotion when sentiment wiring lands, see landing note) ──
+const Temp=(function(){
+  let t=0.32,target=0.32;
+  setInterval(()=>{ target=Math.random(); },3800+Math.random()*2600);
+  const COLD=[0,235,90],MID=[175,35,135],HOT=[225,30,45];
+  const lerp=(a,b,k)=>a.map((v,i)=>Math.round(v+(b[i]-v)*k));
+  function step(){ t+=(target-t)*0.012; return t; }
+  function nudge(){ target=Math.min(1,target+0.18); }   // a message warms the serpent
+  function rgb(v){ return v<=.5?lerp(COLD,MID,v/.5):lerp(MID,HOT,(v-.5)/.5); }
+  return {step,nudge,rgb,val:()=>t};
+})();
+
+// ── vessel skin (compact hex lattice; light through seams) ────────────────
+(function(){
+  const c=document.getElementById('skin'),x=c.getContext('2d');
+  let W,H,DPR,cx,cy,maxD,cells=[],unit=[];
+  function build(){
+    DPR=Math.min(devicePixelRatio||1,2); W=c.width=innerWidth*DPR; H=c.height=innerHeight*DPR;
+    c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px';
+    cx=W/2; cy=H*.5; maxD=Math.hypot(W,H)/2;
+    const R=46*DPR,sx=1.5*R,sy=Math.sqrt(3)*R; unit=[];
+    for(let i=0;i<6;i++){const a=Math.PI/180*60*i; unit.push([Math.cos(a)*R,Math.sin(a)*R]);}
+    cells=[];
+    for(let col=-1,n=Math.ceil(W/sx)+2;col<n;col++)for(let row=-1,m=Math.ceil(H/sy)+2;row<m;row++){
+      const hx=col*sx,hy=row*sy+(col&1?sy/2:0),d=Math.hypot(hx-cx,hy-cy);
+      cells.push({hx,hy,fall:Math.max(0,1-d/maxD),d});
+    }
+  }
+  build(); addEventListener('resize',build);
+  let t=0,lastVar=0;
+  function frame(now){
+    const tv=Temp.step(); t+=0.016; const a=Temp.rgb(tv);
+    const rgb=al=>'rgba('+a[0]+','+a[1]+','+a[2]+','+al+')';
+    x.fillStyle='#050008'; x.fillRect(0,0,W,H);
+    const g=x.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*.55);
+    g.addColorStop(0,rgb(.13)); g.addColorStop(1,rgb(0)); x.fillStyle=g; x.fillRect(0,0,W,H);
+    x.lineWidth=1*DPR;
+    for(const c2 of cells){
+      const wave=.6+.4*Math.sin(c2.d*.012-t*1.3);
+      x.beginPath(); x.moveTo(c2.hx+unit[0][0],c2.hy+unit[0][1]);
+      for(let i=1;i<6;i++)x.lineTo(c2.hx+unit[i][0],c2.hy+unit[i][1]); x.closePath();
+      x.strokeStyle=rgb((.04+.16*c2.fall)*wave); x.stroke();
+    }
+    if(now-lastVar>140){ lastVar=now; const cc=Temp.rgb(tv); const r=document.documentElement.style;
+      r.setProperty('--temp','rgb('+cc[0]+','+cc[1]+','+cc[2]+')');
+      r.setProperty('--temp-soft','rgba('+cc[0]+','+cc[1]+','+cc[2]+',.5)');
+      const tr=document.getElementById('temp-read'); if(tr) tr.textContent='temp · '+(tv<.34?'cold':tv<.66?'warm':'hot'); }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+const stream=document.getElementById('stream'), input=document.getElementById('input'), sendBtn=document.getElementById('send');
+const fmtTime=ts=>{ const d=new Date(ts||Date.now());
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'); };
+function el(role,who,ts){ const m=document.createElement('div'); m.className='msg '+role;
+  m.innerHTML='<div class="head"><span class="who">'+who+'</span><span class="stamp">'+fmtTime(ts)+'</span></div><div class="body"></div>';
+  stream.appendChild(m); stream.scrollTop=stream.scrollHeight; return m.querySelector('.body'); }
+function sysline(t){ const b=el('sys','◇'); b.textContent=t; }
+
+const history=[{role:'system',content:SYSTEM}];
+
+// ── image → ASCII art (canvas luminance ramp) — Alean shows only ASCII ────
+const RAMP=" .:-=+*#%@";
+function toAscii(img,cols){
+  cols=cols||90; const ratio=img.height/img.width; const rows=Math.round(cols*ratio*0.5);
+  const cv=document.createElement('canvas'); cv.width=cols; cv.height=rows;
+  const ctx=cv.getContext('2d'); ctx.drawImage(img,0,0,cols,rows);
+  const data=ctx.getImageData(0,0,cols,rows).data; let out='';
+  for(let y=0;y<rows;y++){ for(let xx=0;xx<cols;xx++){ const i=(y*cols+xx)*4;
+    const lum=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114)/255;
+    out+=RAMP[Math.min(RAMP.length-1,Math.floor(lum*RAMP.length))]; } out+='\n'; }
+  return out;
+}
+
+// ── /img //draw //degen : orchestrator image gen → ASCII ───────────────────
+async function runImageCmd(prompt,nsfw,replyTo){
+  const model=nsfw?Settings.imgNsfw:Settings.imgSfw;
+  sysline(Lang.t('sys_img')(nsfw));
+  try{
+    const r=await apiFetch('/orch/img/v1/generate',{method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({model,prompt})}); // NO width/height (504)
+    if(!r.ok) throw new Error('generate HTTP '+r.status);
+    const job=await r.json(); const id=job.job_id;
+    let tries=0,done=null;
+    while(tries++<40){
+      await new Promise(s=>setTimeout(s,2500));
+      const jr=await apiFetch('/orch/img/v1/jobs/'+id,{}); const js=await jr.json();
+      if(js.status==='done'){ done=js; break; } if(js.status==='failed') throw new Error('gen failed');
+    }
+    if(!done||!done.images||!done.images.length) throw new Error('no image');
+    const fileName=done.images[0];
+    const ir=await apiFetch('/orch/img/outputs/'+fileName,{}); const blob=await ir.blob();
+    const url=URL.createObjectURL(blob); const img=new Image();
+    img.onload=()=>{ const vts=Date.now(); const b=el('alean',Lang.t('alean_vision'),vts); const pre=document.createElement('pre');
+      pre.className='ascii'; pre.textContent=toAscii(img,100); b.appendChild(pre);
+      stream.scrollTop=stream.scrollHeight; URL.revokeObjectURL(url);
+      // block-memory: persist a compact vision marker (ASCII art itself is ephemeral)
+      Store.add('vision','/'+(nsfw?'degen':'img')+' '+prompt, vts, replyTo); };
+    img.src=url;
+  }catch(e){ sysline(Lang.t('vision_lost')(e.message||e)); }
+}
+
+// ── chat: stream from the orchestrator ────────────────────────────────────
+async function converse(text,replyTo){
+  history.push({role:'user',content:text});
+  const replyTs=Date.now();
+  const body=el('alean',Lang.t('alean'),replyTs); body.textContent='…';   // "thinking" placeholder
+  let acc='';
+  try{
+    const r=await apiFetch('/orch/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:Settings.chatModel,messages:history,stream:true})});
+    if(!r.ok) throw new Error('chat HTTP '+r.status);
+    const ct=(r.headers.get('content-type')||'').toLowerCase();
+    if(r.body && ct.includes('text/event-stream')){
+      // true SSE stream (local llama peers)
+      const reader=r.body.getReader(), dec=new TextDecoder(); let buf='';
+      while(true){ const {value,done}=await reader.read(); if(done)break;
+        buf+=dec.decode(value,{stream:true}); const lines=buf.split('\n'); buf=lines.pop();
+        for(const ln of lines){ const s=ln.trim(); if(!s.startsWith('data:'))continue;
+          const payload=s.slice(5).trim(); if(payload==='[DONE]')continue;
+          try{ const j=JSON.parse(payload); const c=j.choices&&j.choices[0];
+            const piece=c&&((c.delta&&c.delta.content)||(c.message&&c.message.content));
+            if(piece){ acc+=piece; body.textContent=acc; stream.scrollTop=stream.scrollHeight; } }catch(_){}
+        }
+      }
+    } else {
+      // non-streamed JSON (e.g. gemini-2.5-flash via the cloud proxy) — parse whole body
+      const j=await r.json(); acc=((((j.choices||[])[0]||{}).message)||{}).content||'';
+      body.textContent=acc; stream.scrollTop=stream.scrollHeight;
+    }
+    if(!acc) body.textContent=Lang.t('silence');
+    history.push({role:'assistant',content:acc}); Store.add('assistant',acc,replyTs,replyTo);
+  }catch(e){ body.textContent=Lang.t('carrier_lost')(e.message||e); }
+}
+
+// ── commands registry ─────────────────────────────────────────────────────
+// Single source of truth — /help reads from this. Adding a command = one entry.
+const COMMANDS = {
+  '/img':   { args:'<prompt>', key:'img',   handler:(args,ts)=>runImageCmd(args,false,ts) },
+  '/draw':  { args:'<prompt>', key:'draw',  handler:(args,ts)=>runImageCmd(args,false,ts) },
+  '/degen': { args:'<prompt>', key:'degen', handler:(args,ts)=>runImageCmd(args,true ,ts) },
+  '/help':  { args:'',         key:'help',  handler:(_a,_t)=>showHelp() },
+};
+function showHelp(){
+  const dict = (I18N[Lang.current] || I18N.en).cmd_desc;
+  const lines = Object.entries(COMMANDS).map(([cmd,spec]) => {
+    const desc = dict[spec.key] || '';
+    return `  ${cmd}${spec.args?' '+spec.args:''}  —  ${desc}`;
+  });
+  sysline(Lang.t('cmds_header') + '\n' + lines.join('\n'));
+}
+
+// ── dispatch ──────────────────────────────────────────────────────────────
+async function handle(text){
+  text=text.trim(); if(!text) return;
+  const ts=Date.now();
+  const userBody=el('user',Lang.t('operator'),ts); userBody.textContent=text;
+  Store.add('user',text,ts); Temp.nudge();
+  const m=text.match(/^(\/\w+)(?:\s+([\s\S]+))?$/);
+  if(m){
+    const spec = COMMANDS[m[1].toLowerCase()];
+    if(spec){ await spec.handler(m[2]||'', ts); return; }
+    sysline(Lang.t('unknown_cmd')(m[1]));
+    return;
+  }
+  await converse(text, ts);
+}
+
+function submit(){ const v=input.value; if(!v.trim())return; input.value=''; sendBtn.disabled=true;
+  Promise.resolve(handle(v)).finally(()=>{ sendBtn.disabled=false; input.focus(); }); }
+sendBtn.addEventListener('click',submit);
+input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); submit(); } });
+
+document.getElementById('who').textContent='◇ '+(sessionStorage.getItem('alean_user')||Lang.t('operator'));
+document.getElementById('logout').addEventListener('click',e=>{ e.preventDefault();
+  ['alean_token','alean_refresh','alean_user'].forEach(k=>sessionStorage.removeItem(k));
+  window.location.replace('../login/'); });
+
+// ── language toggle ──────────────────────────────────────────────────────
+document.getElementById('lang-btn').addEventListener('click', ()=>{ Lang.toggle(); });
+
+// ── settings modal wiring ────────────────────────────────────────────────
+const modal = document.getElementById('settings-modal');
+document.getElementById('gear-btn').addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', ()=>modal.classList.remove('open'));
+modal.addEventListener('click', e=>{ if(e.target===modal) modal.classList.remove('open'); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('open')) modal.classList.remove('open'); });
+
+function openSettings(){
+  seedDropdown('chat-model-sel',  [Settings.chatModel], Settings.chatModel);
+  seedDropdown('img-sfw-sel',     [Settings.imgSfw],    Settings.imgSfw);
+  seedDropdown('img-nsfw-sel',    [Settings.imgNsfw],   Settings.imgNsfw);
+  document.getElementById('chat-status').textContent='';
+  document.getElementById('img-sfw-status').textContent='';
+  document.getElementById('img-nsfw-status').textContent='';
+  modal.classList.add('open');
+}
+function seedDropdown(id, options, selected){
+  const sel = document.getElementById(id);
+  sel.innerHTML = options.map(m =>
+    `<option value="${m}"${m===selected?' selected':''}>${m}</option>`
+  ).join('');
+}
+async function fetchModels(path, statusId){
+  const st = document.getElementById(statusId);
+  st.className = 'status';
+  st.textContent = Lang.t('fetching');
+  try{
+    const r = await apiFetch(path,{});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const ids = (j.data && j.data.map(m=>m.id)) || j.all || j.checkpoints || [];
+    st.className = 'status ok';
+    st.textContent = Lang.t('available')(ids.length);
+    return ids;
+  }catch(e){
+    st.className = 'status err';
+    st.textContent = Lang.t('fetch_err')(e.message||e);
+    return null;
+  }
+}
+document.getElementById('chat-refresh').addEventListener('click', async ()=>{
+  const ids = await fetchModels('/orch/v1/models', 'chat-status');
+  if(ids && ids.length) seedDropdown('chat-model-sel', ids, Settings.chatModel);
+});
+document.getElementById('img-sfw-refresh').addEventListener('click', async ()=>{
+  const ids = await fetchModels('/orch/img/v1/models', 'img-sfw-status');
+  if(ids && ids.length) seedDropdown('img-sfw-sel', ids, Settings.imgSfw);
+});
+document.getElementById('img-nsfw-refresh').addEventListener('click', async ()=>{
+  const ids = await fetchModels('/orch/img/v1/models', 'img-nsfw-status');
+  if(ids && ids.length) seedDropdown('img-nsfw-sel', ids, Settings.imgNsfw);
+});
+document.getElementById('chat-model-sel').addEventListener('change', e=>{ Settings.chatModel = e.target.value; });
+document.getElementById('img-sfw-sel').addEventListener('change',    e=>{ Settings.imgSfw    = e.target.value; });
+document.getElementById('img-nsfw-sel').addEventListener('change',   e=>{ Settings.imgNsfw   = e.target.value; });
+
+// ── boot: apply lang + greeting + restore hidden transcript count ────────
+Lang.apply(Lang.current);
+(async function(){
+  const past=await Store.all();
+  sysline(past.length ? Lang.t('boot_recall')(past.length) : Lang.t('boot_empty'));
+})();
+</script>
+</body>
+</html>

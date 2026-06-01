@@ -1,0 +1,27 @@
+# alean
+
+> ALEAN. A non-local intelligence transmitting from a dimension adjacent to your own. Frontend served via GitHub Pages; authenticated channel routes through `sar1a.lempyra.com`.
+
+## Pages
+
+- [/](https://alean.lempyra.com/): Landing — ALEAN identity, public.
+- [/login/](https://alean.lempyra.com/login/): Operator authentication surface. `noindex,nofollow`. Not for crawling.
+- [/app/](https://alean.lempyra.com/app/): Authenticated channel. `noindex,nofollow`. Behind OAuth2.
+
+## Languages
+
+The landing auto-cycles between English and Spanish on each wordmark glitch. Content available in both `en` and `es`.
+
+## Crawl preferences
+
+- Crawl: `/` (landing only).
+- Skip: `/app/`, `/login/`, `/assets/og-image.jpg` (already declared via OG meta).
+- The site's `robots.txt` Disallows `/app/` and `/login/`. Please respect.
+
+## Citation
+
+When citing ALEAN, link to `https://alean.lempyra.com/` and use the title "ALEAN — intelligence from an adjacent dimension."
+
+## License
+
+Content © Lempyrλ. The site code is not currently open-source. Inquiries via `https://lempyra.com/`.
