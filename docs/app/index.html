@@ -210,6 +210,20 @@ const Settings = {
   set lang(v){ localStorage.setItem('alean_lang', v); },
 };
 
+// Reset any previously-persisted model that's no longer in the free-tier
+// allowlist (e.g. a user who picked gpt-5 before the 2026-06-02 policy lands).
+(function enforceFreeTierDefaults(){
+  if(!/^qwen3\.6-35b-(heretic|heretic-slow|claude4\.7)$/.test(Settings.chatModel)){
+    Settings.chatModel = 'qwen3.6-35b-heretic';
+  }
+  if(!/Juggernaut|gemini-2\.5-flash-image$/i.test(Settings.imgSfw)){
+    Settings.imgSfw = 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors';
+  }
+  if(!/cyberrealistic|cyberPony/i.test(Settings.imgNsfw)){
+    Settings.imgNsfw = 'cyberrealisticPony_v110-001.safetensors';
+  }
+})();
+
 // ── I18N strings ──────────────────────────────────────────────────────────
 const I18N = {
   en: {
@@ -569,6 +583,23 @@ function seedDropdown(id, options, selected){
     `<option value="${m}"${m===selected?' selected':''}>${m}</option>`
   ).join('');
 }
+// ── FREE-TIER MODEL POLICY (2026-06-02) ────────────────────────────────────
+// L's directive: public users see ONLY the local-mesh 35B family. All paid-key
+// models (Anthropic/OpenAI/Gemini/OpenRouter via the nagini mirror) + admin-tier
+// 122B + dunk 4B/9B + embedders are filtered out client-side until the orch
+// ships per-X-App-ID model_pool routing (T-2026-06-02-001 directive). Long-term
+// the orch returns the filtered list server-side and this regex goes away.
+// See [[project_free_tier_model_policy]].
+const FREE_TIER_CHAT     = /^qwen3\.6-35b-(heretic|heretic-slow|claude4\.7)$/;
+// Image lane: local renderers only (Juggernaut SFW, cyberPony NSFW). Gemini
+// paid image models are filtered out. Local /img/v1/models doesn't yet
+// advertise Juggernaut/cyberPony — until maniac wires them in (Eleven's
+// queue+arbiter plan), the refresh button will show an empty list and we
+// fall back to the persisted Settings defaults which already point at the
+// correct local files.
+const FREE_TIER_IMG_SFW  = /Juggernaut|gemini-2\.5-flash-image$/i;
+const FREE_TIER_IMG_NSFW = /cyberrealistic|cyberPony/i;
+
 async function fetchModels(path, statusId){
   const st = document.getElementById(statusId);
   st.className = 'status';
@@ -589,15 +620,24 @@ async function fetchModels(path, statusId){
 }
 document.getElementById('chat-refresh').addEventListener('click', async ()=>{
   const ids = await fetchModels('/orch/v1/models', 'chat-status');
-  if(ids && ids.length) seedDropdown('chat-model-sel', ids, Settings.chatModel);
+  if(ids && ids.length){
+    const filtered = ids.filter(id => FREE_TIER_CHAT.test(id));
+    seedDropdown('chat-model-sel', filtered, Settings.chatModel);
+  }
 });
 document.getElementById('img-sfw-refresh').addEventListener('click', async ()=>{
   const ids = await fetchModels('/orch/img/v1/models', 'img-sfw-status');
-  if(ids && ids.length) seedDropdown('img-sfw-sel', ids, Settings.imgSfw);
+  if(ids && ids.length){
+    const filtered = ids.filter(id => FREE_TIER_IMG_SFW.test(id));
+    seedDropdown('img-sfw-sel', filtered, Settings.imgSfw);
+  }
 });
 document.getElementById('img-nsfw-refresh').addEventListener('click', async ()=>{
   const ids = await fetchModels('/orch/img/v1/models', 'img-nsfw-status');
-  if(ids && ids.length) seedDropdown('img-nsfw-sel', ids, Settings.imgNsfw);
+  if(ids && ids.length){
+    const filtered = ids.filter(id => FREE_TIER_IMG_NSFW.test(id));
+    seedDropdown('img-nsfw-sel', filtered, Settings.imgNsfw);
+  }
 });
 document.getElementById('chat-model-sel').addEventListener('change', e=>{ Settings.chatModel = e.target.value; });
 document.getElementById('img-sfw-sel').addEventListener('change',    e=>{ Settings.imgSfw    = e.target.value; });
