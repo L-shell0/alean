@@ -22,7 +22,10 @@
       const data=await api.request('/auth/otp/verify',{username:user.value.trim(),otp:otp.value});
       if(data.ok!==true)throw Error(say('OTP verification was not confirmed.','La verificación OTP no fue confirmada.'));
       // Verification success alone is not proof that a cross-site cookie persisted.
-      const session=await api.request('/entitlements');
+      let session;try{session=await api.request('/entitlements');}catch(error){
+        if(error.status===401)throw Error(say('The code was accepted, but this API received no session cookie. Gateway/session setup needs review; do not reuse this OTP.','El código fue aceptado, pero esta API no recibió la cookie de sesión. Revise el gateway; no reutilice este OTP.'));
+        throw error;
+      }
       if(!session.member)throw Error(say('This account has no active access.','Esta cuenta no tiene acceso activo.'));
       const prefix=aria?'oca':'alean';for(const key of ['token','refresh','user'])sessionStorage.removeItem(prefix+'_'+key);
       otp.value='';location.replace('../app/');

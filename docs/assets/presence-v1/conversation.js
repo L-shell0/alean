@@ -12,17 +12,18 @@
   }
   async function consume(response,onText=()=>{}){
     if(!response.ok)throw new Error('Service response '+response.status);
-    let text='',images=[];
+    let text='',images=[],models=[];
+    const captureModel=data=>{if(typeof data.model==='string'&&data.model.length<=200&&!models.includes(data.model))models.push(data.model);};
     const append=value=>{const p=splitContent(value);text+=p.text;images.push(...p.images);onText(text);};
     if(!(response.headers.get('content-type')||'').includes('text/event-stream')){
-      const data=await response.json();if(data.error)throw new Error('The service could not answer.');
+      const data=await response.json();if(data.error)throw new Error('The service could not answer.');captureModel(data);
       append(data.choices?.[0]?.message?.content); // No generation endpoint is called.
     }else{
       if(!response.body)throw new Error('Empty stream');
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',done=false,event=[];
       const dispatch=()=>{const raw=event.join('\n');event=[];if(!raw)return;
         if(raw==='[DONE]'){done=true;return;}
-        const data=JSON.parse(raw);if(data.error)throw new Error('The service interrupted its answer.');
+        const data=JSON.parse(raw);if(data.error)throw new Error('The service interrupted its answer.');captureModel(data);
         const value=data.choices?.[0]?.delta?.content??data.choices?.[0]?.message?.content;
         // Preserve spaces across token boundaries; splitContent trims only final content.
         if(typeof value==='string'){text+=value;onText(text);}else if(value)append(value);
@@ -34,7 +35,7 @@
         if(chunk.done){if(buffer)line(buffer.replace(/\r$/,''));dispatch();break;}
       }}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
     }
-    const final=splitContent(text);return {text:final.text,images:[...new Set([...images,...final.images])].slice(0,4)};
+    const final=splitContent(text);return {text:final.text,images:[...new Set([...images,...final.images])].slice(0,4),model:models.at(-1)||null,models};
   }
   function singleFlight(onBusy=()=>{}){let busy=false;return {get busy(){return busy;},async run(task){
     if(busy)return false;busy=true;onBusy(true);

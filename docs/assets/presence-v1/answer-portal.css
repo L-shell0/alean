@@ -1,0 +1,9 @@
+/* Alean: the answer is born inside the entity, never a second chat column. */
+body[data-presence="alean"] .entity .reply-box{position:absolute;z-index:3;top:47%;left:50%;width:min(92%,540px);max-height:min(55svh,450px);margin:0;padding:clamp(19px,3vw,30px);text-align:left;background:rgba(5,13,9,.97);border:1px solid #527561;border-radius:28px 28px 28px 7px;box-shadow:0 0 0 1px #0b1710,0 18px 70px #000a,0 0 50px #80dba418;transform:translate(-50%,-50%);scrollbar-color:#527561 transparent}
+body[data-presence="alean"] .entity.answer-open .reply-box{animation:answer-emerge .7s cubic-bezier(.16,1,.3,1)}
+body[data-presence="alean"] .entity .reply{font-size:clamp(15px,1.4vw,17px);line-height:1.85}
+.response-model{font:10px/1.6 PresenceMono,monospace;overflow-wrap:anywhere;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;margin:18px 0 0;letter-spacing:.01em}
+.response-model.model-mismatch{color:#dfb86d}
+@keyframes answer-emerge{0%{opacity:.05;transform:translate(-50%,-50%) scale(.15)}45%{opacity:1}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@media(max-width:760px){body[data-presence="alean"] .chamber .entity{max-width:430px}body[data-presence="alean"] .entity .reply-box{max-height:300px;width:94%;padding:19px}.response-model{font-size:9px}}
+@media(prefers-reduced-motion:reduce){body[data-presence="alean"] .entity.answer-open .reply-box{animation:none}}

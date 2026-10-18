@@ -11,7 +11,7 @@
   atlas.width=cols*cell;atlas.height=Math.ceil(chars.length*3/cols)*cell;
   const ink=atlas.getContext('2d');if(!ink)return;
   const motion=matchMedia('(prefers-reduced-motion: reduce)');
-  let size=0,elapsed=0,previous=null,last=-Infinity,raf=0,visible=true,state='waiting';
+  let size=0,elapsed=0,previous=null,last=-Infinity,raf=0,visible=true,state='waiting',answerAt=-Infinity;
   const points=[];
   // Hex-like staggered lattice wrapped onto an ellipsoid: an ASCII skin.
   for(let row=0;row<24;row++)for(let col=0;col<32;col++){
@@ -31,9 +31,11 @@
     ctx.clearRect(0,0,size,size);
     const pulse=state==='pulse'?1.4:state==='breathing'?.85:.5;
     const breath=1+.035*Math.sin(t*pulse);
+    const reveal=state==='answer'?(motion.matches?1:Math.min(1,Math.max(0,(t-answerAt)/.75))):0;
+    const opening=1-Math.pow(1-reveal,3),shock=Math.sin(reveal*Math.PI);
     // Fine hexagonal seams: a geometric shell, not a photoreal face.
     ctx.strokeStyle=colors[0];ctx.lineWidth=.65;ctx.globalAlpha=.13;
-    const r=size*.35*breath;
+    const r=size*.35*breath*(1+.16*opening);
     for(let ring=0;ring<3;ring++){
       ctx.beginPath();
       for(let i=0;i<=6;i++){
@@ -45,7 +47,7 @@
     for(const p of points){
       const theta=p.theta+t*.13*(aria?-1:1);
       const wave=.04*Math.sin(p.phi*6+theta*2-t*pulse);
-      const rad=size*.34*breath*(1+wave);
+      const rad=size*.34*breath*(1+wave+.16*opening+.11*shock);
       const x=Math.cos(theta)*Math.sin(p.phi)*rad;
       const z=Math.sin(theta)*Math.sin(p.phi);
       const y=Math.cos(p.phi)*rad*1.08;
@@ -53,6 +55,7 @@
       // A sinuous bright meridian gives the snake-like travelling presence.
       const stripe=.5+.5*Math.cos(theta-p.phi*2.4+t*.4);
       ctx.globalAlpha=(aria?.2+.8*front:.08+.7*front)*(.45+.55*Math.pow(stripe,4));
+      if(!aria)ctx.globalAlpha*=1-.8*opening*Math.exp(-(x*x+y*y)/(size*size*.055));
       const side= Math.max(8,size*(.017+.01*front));
       const glyph=(p.glyph+Math.floor(t*.22+p.phase))%chars.length;
       const i=p.color*chars.length+glyph;
@@ -69,7 +72,9 @@
   const sync=()=>{cancelAnimationFrame(raf);raf=0;previous=null;
     if(motion.matches)draw(0);else if(visible&&!document.hidden)raf=requestAnimationFrame(tick);};
   document.addEventListener('presence-state',event=>{
-    state=event.detail==='working'?'pulse':'waiting';
+    const next=event.detail==='working'?'pulse':event.detail==='answer'&&!aria?'answer':'waiting';
+    if(next==='answer'&&state!=='answer')answerAt=elapsed;
+    state=next;
     if(motion.matches)draw(elapsed);
   });
   const resize=()=>{size=canvas.getBoundingClientRect().width;if(!size)return;
